@@ -44,7 +44,8 @@ fn check_compilation_status(shader: u32) {
                 std::ptr::null_mut(),
                 info_log.as_mut_ptr() as _,
             );
-            eprintln!("compilation failed: {:?}", std::str::from_utf8(&info_log));
+            let s = CStr::from_bytes_until_nul(&info_log);
+            eprintln!("compilation failed: {:?}", s);
         }
     }
 }
@@ -61,7 +62,8 @@ fn check_linking_status(program: u32) {
                 std::ptr::null_mut(),
                 info_log.as_mut_ptr() as _,
             );
-            eprintln!("linking failed: {:?}", std::str::from_utf8(&info_log));
+            let s = CStr::from_bytes_until_nul(&info_log);
+            eprintln!("linking failed: {:?}", s);
         }
     }
 }
@@ -97,12 +99,16 @@ fn vertex_input() -> (u32, u32, u32) {
     };
 
     #[rustfmt::skip]
-    let vertices: [f32; 9] = [
+    let vertices: [f32; 18] = [
         // Each line is a triangle:
         // x, y, z
-        -0.5, -0.5, 0.0,
-        0.5, -0.5, 0.0,
-        0.0, 0.5, 0.0
+        -0.5, -0.5, 0.0, // left
+        0.5, -0.5, 0.0, // right
+        0.0, 0.5, 0.0, // top
+
+        0.0, -0.5, 0.0,  // left
+        0.9, -0.5, 0.0,  // right
+        0.45, 0.5, 0.0   // top
     ];
 
     let mut vbo = 0;
@@ -131,7 +137,7 @@ fn vertex_input() -> (u32, u32, u32) {
         // gl::UseProgram(shader_program);
         gl::BindVertexArray(0);
 
-        // gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+        gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
 
         // gl::DrawArrays(gl::TRIANGLES, 0, 3);
 
@@ -172,7 +178,7 @@ fn main() {
         unsafe {
             gl::UseProgram(shader_program);
             gl::BindVertexArray(vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::DrawArrays(gl::TRIANGLES, 0, 6);
         }
 
         window.swap_buffers();
