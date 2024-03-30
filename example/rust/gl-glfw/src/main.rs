@@ -40,9 +40,10 @@ const VERTEX_SHADER: &CStr = c"#version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
 out vec3 ourColor;
+uniform float x_offset;
 void main()
 {
-    gl_Position = vec4(aPos, 1.0);
+    gl_Position = vec4(aPos.x + x_offset, aPos.y, aPos.z, 1.0);
     ourColor = aColor;
 }";
 
@@ -137,19 +138,11 @@ fn vertex_input() -> (u32, u32, u32) {
         0.5, -0.5, 0.0,    1.0, 0.0, 0.0,   // bottom right
         -0.5, -0.5, 0.0,   0.0, 1.0, 0.0,   // bottom left
         0.0,  0.5, 0.0,    0.0, 0.0, 1.0    // top
+        // // positions       // colors
+        // 0.5, 0.5, 0.0,    1.0, 0.0, 0.0,   // bottom right
+        // -0.5, 0.5, 0.0,   0.0, 1.0, 0.0,   // bottom left
+        // 0.0,  -0.5, 0.0,    0.0, 0.0, 1.0    // top
     ];
-
-    // let vertices: [f32; 18] = [
-    //     // Each line is a triangle:
-    //     // x, y, z
-    //     -0.5, -0.5, 0.0, // left
-    //     0.5, -0.5, 0.0, // right
-    //     0.0, 0.5, 0.0, // top
-
-    //     0.0, -0.5, 0.0,  // left
-    //     0.9, -0.5, 0.0,  // right
-    //     0.45, 0.5, 0.0   // top
-    // ];
 
     let mut vbo1 = 0;
     let mut vao1 = 0;
@@ -224,8 +217,12 @@ fn main() {
             // let vertex_color_location = gl::GetUniformLocation(shader_program, c"ourColor".as_ptr() as _);
             // assert_ne!(vertex_color_location, -1);
 
+            let x_offset_location = gl::GetUniformLocation(shader_program, c"x_offset".as_ptr() as _);
+            assert_ne!(x_offset_location, -1);
+
             gl::UseProgram(shader_program);
             gl::BindVertexArray(vao1);
+            gl::Uniform1f(x_offset_location, 0.2);
             gl::DrawArrays(gl::TRIANGLES, 0, 6);
             // gl::UseProgram(shader_program2);
             // gl::BindVertexArray(vao2);
