@@ -141,90 +141,6 @@ fn vertex_input() -> (u32, u32, u32) {
     }
 }
 
-fn vertex_input_with_ebo() -> (u32, u32, u32, u32) {
-    let shader_program = unsafe {
-        let vertex_shader = gl::CreateShader(gl::VERTEX_SHADER);
-        gl::ShaderSource(
-            vertex_shader,
-            1,
-            &VERTEX_SHADER.as_ptr() as _,
-            std::ptr::null(),
-        );
-        gl::CompileShader(vertex_shader);
-        check_compilation_status(vertex_shader);
-
-        let frag_shader = gl::CreateShader(gl::FRAGMENT_SHADER);
-        gl::ShaderSource(frag_shader, 1, &FRAG_SHADER.as_ptr() as _, std::ptr::null());
-        gl::CompileShader(frag_shader);
-        check_compilation_status(frag_shader);
-
-        let shader_program = gl::CreateProgram();
-
-        gl::AttachShader(shader_program, vertex_shader);
-        gl::AttachShader(shader_program, frag_shader);
-        gl::LinkProgram(shader_program);
-        check_linking_status(shader_program);
-
-        gl::DeleteShader(vertex_shader);
-        gl::DeleteShader(frag_shader);
-
-        shader_program
-    };
-
-    #[rustfmt::skip]
-    let vertices: [f32; 12] = [
-        0.5,  0.5, 0.0,  // top right
-        0.5, -0.5, 0.0,  // bottom right
-        -0.5, -0.5, 0.0,  // bottom left
-        -0.5,  0.5, 0.0   // top left
-    ];
-
-    let indices: [i32; 6] = [ // note that we start from 0!
-        0, 1, 3,   // first triangle
-        1, 2, 3    // second triangle
-    ];
-
-    let mut vbo = 0;
-    let mut vao = 0;
-    let mut ebo = 0;
-
-    unsafe {
-        gl::GenVertexArrays(1, &mut vao);
-        gl::GenBuffers(1, &mut vbo);
-        gl::GenBuffers(1, &mut ebo);
-
-        gl::BindVertexArray(vao);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        let nbytes = dbg!(std::mem::size_of_val(&vertices));
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            nbytes as _,
-            vertices.as_ptr() as _,
-            gl::STATIC_DRAW,
-        );
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-        let nbytes = dbg!(std::mem::size_of_val(&indices));
-        gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, nbytes as _, indices.as_ptr() as _, gl::STATIC_DRAW);
-
-        let stride = 3 * dbg!(std::mem::size_of::<f32>());
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, stride as i32, std::ptr::null());
-        gl::EnableVertexAttribArray(0);
-
-        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-
-        // gl::UseProgram(shader_program);
-        gl::BindVertexArray(0);
-
-        // gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
-
-        // gl::DrawArrays(gl::TRIANGLES, 0, 3);
-
-        eprintln!("OK");
-
-        return (shader_program, vao, vbo, ebo);
-    }
-}
-
 fn main() {
     let mut glfw = glfw::init_no_callbacks().unwrap();
 
@@ -242,7 +158,7 @@ fn main() {
 
     gl::load(|e| glfw.get_proc_address_raw(e) as *const std::os::raw::c_void);
 
-    let (shader_program, vao, vbo, ebo) = vertex_input_with_ebo();
+    let (shader_program, vao, vbo) = vertex_input();
 
     while !window.should_close() {
         process_input(&mut window);
@@ -256,10 +172,7 @@ fn main() {
         unsafe {
             gl::UseProgram(shader_program);
             gl::BindVertexArray(vao);
-            // gl::DrawArrays(gl::TRIANGLES, 0, 3);
-
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
+            gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
         window.swap_buffers();
