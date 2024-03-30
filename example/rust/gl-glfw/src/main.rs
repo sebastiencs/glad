@@ -52,9 +52,11 @@ void main()
 
 const FRAG2_SHADER: &CStr = c"#version 330 core
 out vec4 FragColor;
+uniform vec4 ourColor;
 void main()
 {
-    FragColor = vec4(1.0f, 0.0f, 0.0f, 0.9f);
+    // FragColor = vec4(1.0f, 0.0f, 0.0f, 0.9f);
+    FragColor = ourColor;
 }";
 
 fn check_compilation_status(shader: u32) {
@@ -264,12 +266,19 @@ fn main() {
     while !window.should_close() {
         process_input(&mut window);
 
+        let time_value = glfw.get_time();
+        let green_value = ((time_value.sin()) / 2.0) + 0.5;
+
         unsafe {
+            let vertex_color_location = gl::GetUniformLocation(shader_program2, c"ourColor".as_ptr() as _);
+            assert_ne!(vertex_color_location, -1);
+
             gl::UseProgram(shader_program1);
             gl::BindVertexArray(vao1);
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
             gl::UseProgram(shader_program2);
             gl::BindVertexArray(vao2);
+            gl::Uniform4f(vertex_color_location, 0.0, green_value as _, 0.0, 1.0);
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
@@ -277,13 +286,18 @@ fn main() {
         glfw.poll_events();
     }
 
+    let mut nr_attributes = 0;
+
     unsafe {
+        gl::GetIntegerv(gl::MAX_VERTEX_ATTRIBS, &mut nr_attributes);
         gl::DeleteVertexArrays(1, &vao1);
         gl::DeleteBuffers(1, &vbo1);
         gl::DeleteBuffers(1, &vbo2);
         gl::DeleteProgram(shader_program1);
         gl::DeleteProgram(shader_program2);
     }
+
+    dbg!(nr_attributes);
 }
 
 fn handle_window_event(window: &mut glfw::Window, event: glfw::WindowEvent) {
