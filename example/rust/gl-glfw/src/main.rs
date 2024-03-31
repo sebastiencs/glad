@@ -61,7 +61,8 @@ in vec2 TexCoord;
 uniform sampler2D ourTexture;
 void main()
 {
-    FragColor = texture(ourTexture, TexCoord);
+    FragColor = texture(ourTexture, TexCoord) * vec4(ourColor, 1.0);
+    // FragColor = texture(ourTexture, TexCoord);
     // FragColor = vec4(ourPosition, 1.0f);
     // FragColor = vec4(ourColor, 1.0f);
     // FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
@@ -218,6 +219,7 @@ fn texture(image: &Image<u8>) -> u32 {
 
     unsafe {
         gl::GenTextures(1, &mut texture);
+        gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D, texture);
 
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::MIRRORED_REPEAT as _);
