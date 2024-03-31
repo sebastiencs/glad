@@ -59,9 +59,11 @@ in vec3 ourColor;
 in vec3 ourPosition;
 in vec2 TexCoord;
 uniform sampler2D ourTexture;
+uniform sampler2D ourTexture2;
 void main()
 {
-    FragColor = texture(ourTexture, TexCoord) * vec4(ourColor, 1.0);
+    FragColor = mix(texture(ourTexture, TexCoord), texture(ourTexture2, TexCoord), 0.2);
+    // FragColor = texture(ourTexture, TexCoord) * vec4(ourColor, 1.0);
     // FragColor = texture(ourTexture, TexCoord);
     // FragColor = vec4(ourPosition, 1.0f);
     // FragColor = vec4(ourColor, 1.0f);
@@ -213,13 +215,20 @@ fn vertex_input() -> (u32, u32, u32, u32) {
     (shader_program, vao1, vbo1, ebo)
 }
 
-fn texture(image: &Image<u8>) -> u32 {
+const TEXTURES: [(u32, u32); 2] = [
+    (gl::RGB, gl::TEXTURE0),
+    (gl::RGBA, gl::TEXTURE1),
+];
+
+fn texture(image: &Image<u8>, index: usize) -> u32 {
     let Image { width, height, depth: _, data } = &image;
     let mut texture = 0;
 
+    let (format, tex_name) = TEXTURES[index];
+
     unsafe {
         gl::GenTextures(1, &mut texture);
-        gl::ActiveTexture(gl::TEXTURE0);
+        // gl::ActiveTexture(tex_name);
         gl::BindTexture(gl::TEXTURE_2D, texture);
 
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::MIRRORED_REPEAT as _);
@@ -227,11 +236,33 @@ fn texture(image: &Image<u8>) -> u32 {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR_MIPMAP_LINEAR as _);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
 
-        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGB as _, *width as _, *height as _, 0, gl::RGB, gl::UNSIGNED_BYTE, data.as_ptr() as _);
+        gl::TexImage2D(gl::TEXTURE_2D, 0, format as _, *width as _, *height as _, 0, format, gl::UNSIGNED_BYTE, data.as_ptr() as _);
         gl::GenerateMipmap(gl::TEXTURE_2D);
     }
 
     texture
+}
+
+fn get_image(path: &str) -> Image<u8> {
+    unsafe {
+        stb_image::stb_image::stbi_set_flip_vertically_on_load(1);
+    }
+
+    let img = stb_image::image::load(path);
+    let img = match img {
+        stb_image::image::LoadResult::Error(e) => todo!(),
+        stb_image::image::LoadResult::ImageU8(img) => {
+            let Image { width, height, depth, data } = &img;
+            dbg!(width, height, depth, data.len());
+            img
+            // dbg!(&v.data);
+        },
+        stb_image::image::LoadResult::ImageF32(Image { width, height, depth, data }) => {
+            dbg!(width, height, depth, data.len());
+            todo!()
+        },
+    };
+    img
 }
 
 fn main() {
@@ -253,22 +284,17 @@ fn main() {
 
     let (shader_program, vao1, vbo1, ebo) = vertex_input();
 
-    let img = stb_image::image::load("container.jpg");
-    let img = match img {
-        stb_image::image::LoadResult::Error(e) => todo!(),
-        stb_image::image::LoadResult::ImageU8(img) => {
-            let Image { width, height, depth, data } = &img;
-            dbg!(width, height, depth, data.len());
-            img
-            // dbg!(&v.data);
-        },
-        stb_image::image::LoadResult::ImageF32(Image { width, height, depth, data }) => {
-            dbg!(width, height, depth, data.len());
-            todo!()
-        },
-    };
+    let img = get_image("container.jpg");
+    let img2 = get_image("awesomeface.png");
 
-    let texture = texture(&img);
+    let texture1 = texture(&img, 0);
+    let texture2 = texture(&img2, 1);
+
+    unsafe {
+        gl::UseProgram(shader_program);
+        gl::Uniform1i(gl::GetUniformLocation(shader_program, c"ourTexture".as_ptr()), 0);
+        gl::Uniform1i(gl::GetUniformLocation(shader_program, c"ourTexture2".as_ptr()), 1);
+    }
 
     while !window.should_close() {
         process_input(&mut window);
@@ -283,9 +309,18 @@ fn main() {
             let x_offset_location = gl::GetUniformLocation(shader_program, c"x_offset".as_ptr() as _);
             assert_ne!(x_offset_location, -1);
 
-            gl::BindTexture(gl::TEXTURE_2D, texture);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, texture1);
+            gl::ActiveTexture(gl::TEXTURE1);
+            // gl::BindTexture(gl::TEXTURE_2D, texture);
+            gl::BindTexture(gl::TEXTURE_2D, texture2);
 
             gl::UseProgram(shader_program);
+
+
+            // gl::Uniform1i(dbg!(gl::GetUniformLocation(shader_program, c"ourTexture".as_ptr())), 0);
+            // gl::Uniform1i(dbg!(gl::GetUniformLocation(shader_program, c"ourTexture2".as_ptr())), 1);
+
             // gl::BindVertexArray(vao1);
             // gl::Uniform1f(x_offset_location, 0.2);
             // gl::DrawArrays(gl::TRIANGLES, 0, 6);
