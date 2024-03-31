@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 glfw = "0.55"
 glad-gl = { path = "./build/glad-gl" }
+stb_image = "0.3.0"

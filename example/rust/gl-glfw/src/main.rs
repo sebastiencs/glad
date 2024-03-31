@@ -2,6 +2,7 @@ use std::{ffi::CStr, sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed}};
 
 use glad_gl::gl;
 use glfw::{Action, Context, Key, PWindow};
+use stb_image::image::Image;
 
 static MODE: AtomicU8 = AtomicU8::new(0);
 static WAS_PRESSED: AtomicBool = AtomicBool::new(false);
@@ -39,23 +40,29 @@ fn process_input(window: &mut PWindow) {
 const VERTEX_SHADER: &CStr = c"#version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
+layout (location = 2) in vec2 aTexCoord;
 out vec3 ourColor;
 out vec3 ourPosition;
+out vec2 TexCoord;
 uniform float x_offset;
 void main()
 {
     gl_Position = vec4(aPos.x + x_offset, aPos.y, aPos.z, 1.0);
     ourPosition = gl_Position.xyz;
     ourColor = aColor;
+    TexCoord = aTexCoord;
 }";
 
 const FRAG_SHADER: &CStr = c"#version 330 core
 out vec4 FragColor;
 in vec3 ourColor;
 in vec3 ourPosition;
+in vec2 TexCoord;
+uniform sampler2D ourTexture;
 void main()
 {
-    FragColor = vec4(ourPosition, 1.0f);
+    FragColor = texture(ourTexture, TexCoord);
+    // FragColor = vec4(ourPosition, 1.0f);
     // FragColor = vec4(ourColor, 1.0f);
     // FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
 }";
@@ -106,7 +113,7 @@ fn check_linking_status(program: u32) {
     }
 }
 
-fn vertex_input() -> (u32, u32, u32) {
+fn vertex_input() -> (u32, u32, u32, u32) {
     let shader_program = unsafe {
         let vertex_shader = gl::CreateShader(gl::VERTEX_SHADER);
         gl::ShaderSource(
@@ -137,23 +144,27 @@ fn vertex_input() -> (u32, u32, u32) {
     };
 
     #[rustfmt::skip]
-    let vertices: [f32; 18] = [
-        // positions       // colors
-        0.5, -0.5, 0.0,    1.0, 0.0, 0.0,   // bottom right
-        -0.5, -0.5, 0.0,   0.0, 1.0, 0.0,   // bottom left
-        0.0,  0.5, 0.0,    0.0, 0.0, 1.0    // top
-        // // positions       // colors
-        // 0.5, 0.5, 0.0,    1.0, 0.0, 0.0,   // bottom right
-        // -0.5, 0.5, 0.0,   0.0, 1.0, 0.0,   // bottom left
-        // 0.0,  -0.5, 0.0,    0.0, 0.0, 1.0    // top
+    let vertices: [f32; 32] = [
+        // positions       // colors        // texture coords
+        0.5,  0.5, 0.0,    1.0, 0.0, 0.0,   1.0, 1.0,   // top right
+        0.5, -0.5, 0.0,    0.0, 1.0, 0.0,   1.0, 0.0,   // bottom right
+        -0.5, -0.5, 0.0,   0.0, 0.0, 1.0,   0.0, 0.0,   // bottom left
+        -0.5,  0.5, 0.0,   1.0, 1.0, 0.0,   0.0, 1.0    // top left
+    ];
+    #[rustfmt::skip]
+    let indices: [i32; 6] = [
+        0, 1, 3, // first triangle
+        1, 2, 3  // second triangle
     ];
 
     let mut vbo1 = 0;
     let mut vao1 = 0;
+    let mut ebo = 0;
 
     unsafe {
         gl::GenVertexArrays(1, &mut vao1);
         gl::GenBuffers(1, &mut vbo1);
+        gl::GenBuffers(1, &mut ebo);
 
         gl::BindVertexArray(vao1);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo1);
@@ -165,15 +176,24 @@ fn vertex_input() -> (u32, u32, u32) {
             gl::STATIC_DRAW,
         );
 
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+        let nbytes = dbg!(std::mem::size_of_val(&indices));
+        gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, nbytes as _, indices.as_ptr() as _, gl::STATIC_DRAW);
+
         // position
-        let stride = 6 * dbg!(std::mem::size_of::<f32>());
+        let stride = 8 * dbg!(std::mem::size_of::<f32>());
         gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, stride as i32, std::ptr::null());
         gl::EnableVertexAttribArray(0);
 
         // color
-        let stride = 6 * dbg!(std::mem::size_of::<f32>());
+        let stride = 8 * dbg!(std::mem::size_of::<f32>());
         gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, stride as i32, (3 * std::mem::size_of::<f32>()) as _);
         gl::EnableVertexAttribArray(1);
+
+        // texture
+        let stride = 8 * dbg!(std::mem::size_of::<f32>());
+        gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, stride as i32, (6 * std::mem::size_of::<f32>()) as _);
+        gl::EnableVertexAttribArray(2);
 
         gl::BindBuffer(gl::ARRAY_BUFFER, 0);
 
@@ -189,7 +209,27 @@ fn vertex_input() -> (u32, u32, u32) {
         // return (shader_program, vao1, vbo1);
     }
 
-    return (shader_program, vao1, vbo1);
+    (shader_program, vao1, vbo1, ebo)
+}
+
+fn texture(image: &Image<u8>) -> u32 {
+    let Image { width, height, depth: _, data } = &image;
+    let mut texture = 0;
+
+    unsafe {
+        gl::GenTextures(1, &mut texture);
+        gl::BindTexture(gl::TEXTURE_2D, texture);
+
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::MIRRORED_REPEAT as _);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::MIRRORED_REPEAT as _);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR_MIPMAP_LINEAR as _);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
+
+        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGB as _, *width as _, *height as _, 0, gl::RGB, gl::UNSIGNED_BYTE, data.as_ptr() as _);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+    }
+
+    texture
 }
 
 fn main() {
@@ -209,13 +249,30 @@ fn main() {
 
     gl::load(|e| glfw.get_proc_address_raw(e) as *const std::os::raw::c_void);
 
-    let (shader_program, vao1, vbo1) = vertex_input();
+    let (shader_program, vao1, vbo1, ebo) = vertex_input();
+
+    let img = stb_image::image::load("container.jpg");
+    let img = match img {
+        stb_image::image::LoadResult::Error(e) => todo!(),
+        stb_image::image::LoadResult::ImageU8(img) => {
+            let Image { width, height, depth, data } = &img;
+            dbg!(width, height, depth, data.len());
+            img
+            // dbg!(&v.data);
+        },
+        stb_image::image::LoadResult::ImageF32(Image { width, height, depth, data }) => {
+            dbg!(width, height, depth, data.len());
+            todo!()
+        },
+    };
+
+    let texture = texture(&img);
 
     while !window.should_close() {
         process_input(&mut window);
 
-        let time_value = glfw.get_time();
-        let green_value = ((time_value.sin()) / 2.0) + 0.5;
+        // let time_value = glfw.get_time();
+        // let green_value = ((time_value.sin()) / 2.0) + 0.5;
 
         unsafe {
             // let vertex_color_location = gl::GetUniformLocation(shader_program, c"ourColor".as_ptr() as _);
@@ -224,10 +281,16 @@ fn main() {
             let x_offset_location = gl::GetUniformLocation(shader_program, c"x_offset".as_ptr() as _);
             assert_ne!(x_offset_location, -1);
 
+            gl::BindTexture(gl::TEXTURE_2D, texture);
+
             gl::UseProgram(shader_program);
+            // gl::BindVertexArray(vao1);
+            // gl::Uniform1f(x_offset_location, 0.2);
+            // gl::DrawArrays(gl::TRIANGLES, 0, 6);
+
             gl::BindVertexArray(vao1);
-            gl::Uniform1f(x_offset_location, 0.2);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, 0 as _);
+
             // gl::UseProgram(shader_program2);
             // gl::BindVertexArray(vao2);
             // gl::Uniform4f(vertex_color_location, 0.0, green_value as _, 0.0, 1.0);
@@ -244,6 +307,7 @@ fn main() {
         gl::GetIntegerv(gl::MAX_VERTEX_ATTRIBS, &mut nr_attributes);
         gl::DeleteVertexArrays(1, &vao1);
         gl::DeleteBuffers(1, &vbo1);
+        gl::DeleteBuffers(1, &ebo);
         // gl::DeleteBuffers(1, &vbo2);
         gl::DeleteProgram(shader_program);
         // gl::DeleteProgram(shader_program2);
